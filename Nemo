@@ -1,0 +1,634 @@
+-- DEKUz Combat UI
+-- LocalScript
+-- สำหรับเกมของตัวเอง
+
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+
+local player = Players.LocalPlayer
+local guiParent = player:WaitForChild("PlayerGui")
+
+
+local attackRemote = ReplicatedStorage
+	:WaitForChild("Remotes")
+	:WaitForChild("Attack")
+
+
+
+------------------------------------------------
+-- ตัวแปรระบบ
+------------------------------------------------
+
+local autoEquip = false
+local fastAttack = false
+local selectedWeapon = nil
+
+local attackCooldown = 0.10
+
+
+
+------------------------------------------------
+-- สร้าง GUI
+------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "DEKUzCombat"
+gui.ResetOnSpawn = false
+gui.Parent = guiParent
+
+
+
+local openButton = Instance.new("TextButton")
+openButton.Size = UDim2.new(0,100,0,35)
+openButton.Position = UDim2.new(1,-120,0,20)
+openButton.Text = "💙 DEKUz"
+openButton.Font = Enum.Font.GothamBold
+openButton.TextSize = 14
+openButton.Parent = gui
+
+
+
+local main = Instance.new("Frame")
+
+main.Size = UDim2.new(0,260,0,220)
+main.Position = UDim2.new(.5,-130,.5,-110)
+main.BackgroundColor3 = Color3.fromRGB(25,25,40)
+main.Visible = false
+main.Parent = gui
+
+
+
+local title = Instance.new("TextLabel")
+
+title.Size = UDim2.new(1,0,0,35)
+title.Text = "💙 DEKUz COMBAT"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundColor3 = Color3.fromRGB(0,120,255)
+title.Parent = main
+
+
+
+------------------------------------------------
+-- ลากหน้าต่าง
+------------------------------------------------
+
+local dragging = false
+local dragStart
+local startPos
+
+
+title.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+
+	end
+
+end)
+
+
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if dragging 
+	and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+		local delta = input.Position - dragStart
+
+		main.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+
+	end
+
+end)
+
+
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = false
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- สร้างปุ่ม
+------------------------------------------------
+
+local function createButton(text,y)
+
+	local button = Instance.new("TextButton")
+
+	button.Size = UDim2.new(0,200,0,30)
+	button.Position = UDim2.new(0,30,0,y)
+	button.Text = text
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 13
+	button.Parent = main
+
+
+	return button
+
+end
+
+
+
+local equipButton = createButton(
+	"🎒 Auto Equip : OFF",
+50
+)
+
+
+local attackButton = createButton(
+	"⚔ Fast Attack : OFF",
+90
+)
+
+
+local weaponButton = createButton(
+	"🗡 เลือกอาวุธ",
+130
+)
+
+
+
+------------------------------------------------
+-- เปิดปิด UI
+------------------------------------------------
+
+openButton.MouseButton1Click:Connect(function()
+
+	main.Visible = not main.Visible
+
+end)
+
+
+
+------------------------------------------------
+-- Auto Equip
+------------------------------------------------
+
+equipButton.MouseButton1Click:Connect(function()
+
+	autoEquip = not autoEquip
+
+
+	if autoEquip then
+
+		equipButton.Text =
+			"🎒 Auto Equip : ON"
+
+	else
+
+		equipButton.Text =
+			"🎒 Auto Equip : OFF"
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Fast Attack
+------------------------------------------------
+
+attackButton.MouseButton1Click:Connect(function()
+
+	fastAttack = not fastAttack
+
+
+	if fastAttack then
+
+		attackButton.Text =
+			"⚔ Fast Attack : ON"
+
+	else
+
+		attackButton.Text =
+			"⚔ Fast Attack : OFF"
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- เลือกอาวุธ
+------------------------------------------------
+
+weaponButton.MouseButton1Click:Connect(function()
+
+
+	for _,tool in pairs(player.Backpack:GetChildren()) do
+
+
+		if tool:IsA("Tool") then
+
+
+			selectedWeapon = tool
+
+
+			weaponButton.Text =
+				"🗡 "..tool.Name
+
+
+			break
+
+		end
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Auto Equip Loop
+------------------------------------------------
+
+task.spawn(function()
+
+	while task.wait(0.2) do
+
+
+		if autoEquip and selectedWeapon then
+
+
+			local char = player.Character
+
+
+			if char 
+			and selectedWeapon.Parent == player.Backpack then
+
+
+				selectedWeapon.Parent = char
+
+
+			end
+
+		end
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Fast Attack Loop
+------------------------------------------------
+
+task.spawn(function()
+
+
+	while task.wait(attackCooldown) do
+
+
+		if fastAttack then
+
+
+			attackRemote:FireServer()
+
+
+		end
+
+
+	end
+
+
+end)
+
+-- DEKUz Combat UI
+-- LocalScript
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+
+local player = Players.LocalPlayer
+local guiParent = player:WaitForChild("PlayerGui")
+
+
+local attackRemote = ReplicatedStorage
+	:WaitForChild("Remotes")
+	:WaitForChild("Attack")
+
+
+
+------------------------------------------------
+-- ตัวแปรระบบ
+------------------------------------------------
+
+local autoEquip = false
+local fastAttack = false
+local selectedWeapon = nil
+
+local attackCooldown = 0.10
+
+
+------------------------------------------------
+-- สร้าง GUI
+------------------------------------------------
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "DEKUzCombat"
+gui.ResetOnSpawn = false
+gui.Parent = guiParent
+
+
+
+local openButton = Instance.new("TextButton")
+openButton.Size = UDim2.new(0,100,0,35)
+openButton.Position = UDim2.new(1,-120,0,20)
+openButton.Text = "💙 DEKUz"
+openButton.Font = Enum.Font.GothamBold
+openButton.TextSize = 14
+openButton.Parent = gui
+
+
+
+local main = Instance.new("Frame")
+
+main.Size = UDim2.new(0,260,0,220)
+main.Position = UDim2.new(.5,-130,.5,-110)
+main.BackgroundColor3 = Color3.fromRGB(25,25,40)
+main.Visible = false
+main.Parent = gui
+
+
+
+local title = Instance.new("TextLabel")
+
+title.Size = UDim2.new(1,0,0,35)
+title.Text = "💙 DEKUz COMBAT"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundColor3 = Color3.fromRGB(0,120,255)
+title.Parent = main
+
+
+
+------------------------------------------------
+-- ลากหน้าต่าง
+------------------------------------------------
+
+local dragging = false
+local dragStart
+local startPos
+
+
+title.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = true
+		dragStart = input.Position
+		startPos = main.Position
+
+	end
+
+end)
+
+
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if dragging 
+	and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+		local delta = input.Position - dragStart
+
+		main.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+
+	end
+
+end)
+
+
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = false
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- สร้างปุ่ม
+------------------------------------------------
+
+local function createButton(text,y)
+
+	local button = Instance.new("TextButton")
+
+	button.Size = UDim2.new(0,200,0,30)
+	button.Position = UDim2.new(0,30,0,y)
+	button.Text = text
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 13
+	button.Parent = main
+
+
+	return button
+
+end
+
+
+
+local equipButton = createButton(
+	"🎒 Auto Equip : OFF",
+50
+)
+
+
+local attackButton = createButton(
+	"⚔ Fast Attack : OFF",
+90
+)
+
+
+local weaponButton = createButton(
+	"🗡 เลือกอาวุธ",
+130
+)
+
+
+
+------------------------------------------------
+-- เปิดปิด UI
+------------------------------------------------
+
+openButton.MouseButton1Click:Connect(function()
+
+	main.Visible = not main.Visible
+
+end)
+
+
+
+------------------------------------------------
+-- Auto Equip
+------------------------------------------------
+
+equipButton.MouseButton1Click:Connect(function()
+
+	autoEquip = not autoEquip
+
+
+	if autoEquip then
+
+		equipButton.Text =
+			"🎒 Auto Equip : ON"
+
+	else
+
+		equipButton.Text =
+			"🎒 Auto Equip : OFF"
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Fast Attack
+------------------------------------------------
+
+attackButton.MouseButton1Click:Connect(function()
+
+	fastAttack = not fastAttack
+
+
+	if fastAttack then
+
+		attackButton.Text =
+			"⚔ Fast Attack : ON"
+
+	else
+
+		attackButton.Text =
+			"⚔ Fast Attack : OFF"
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- เลือกอาวุธ
+------------------------------------------------
+
+weaponButton.MouseButton1Click:Connect(function()
+
+
+	for _,tool in pairs(player.Backpack:GetChildren()) do
+
+
+		if tool:IsA("Tool") then
+
+
+			selectedWeapon = tool
+
+
+			weaponButton.Text =
+				"🗡 "..tool.Name
+
+
+			break
+
+		end
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Auto Equip Loop
+------------------------------------------------
+
+task.spawn(function()
+
+	while task.wait(0.2) do
+
+
+		if autoEquip and selectedWeapon then
+
+
+			local char = player.Character
+
+
+			if char 
+			and selectedWeapon.Parent == player.Backpack then
+
+
+				selectedWeapon.Parent = char
+
+
+			end
+
+		end
+
+	end
+
+end)
+
+
+
+------------------------------------------------
+-- Fast Attack Loop
+------------------------------------------------
+
+task.spawn(function()
+
+
+	while task.wait(attackCooldown) do
+
+
+		if fastAttack then
+
+
+			attackRemote:FireServer()
+
+
+		end
+
+
+	end
+
+
+end)
