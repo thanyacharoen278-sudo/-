@@ -1,0 +1,1131 @@
+--==================================================
+-- D COMBAT - ONE FILE
+-- Roblox Studio / เกมของคุณเอง
+-- LocalScript
+-- StarterPlayer > StarterPlayerScripts
+--==================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--==================================================
+-- SETTINGS
+--==================================================
+
+local RANGE = 550
+local DAMAGE = 5000
+
+local NORMAL_DELAY = 0.30
+local FAST_DELAY = 0.10
+
+local GATHER_DISTANCE = 12
+local MAX_TARGETS = 30
+
+--==================================================
+-- PLAYER SETTINGS
+--==================================================
+
+local Settings = {
+	AutoAttack = false,
+	FastAttack = false,
+	Gather = false,
+
+	AimLock = false,
+	AimPlayerName = "",
+
+	Running = true
+}
+
+--==================================================
+-- ENEMIES
+--==================================================
+
+local Enemies = workspace:FindFirstChild("Enemies")
+
+if not Enemies then
+	Enemies = Instance.new("Folder")
+	Enemies.Name = "Enemies"
+	Enemies.Parent = workspace
+end
+
+--==================================================
+-- CHARACTER
+--==================================================
+
+local function GetCharacter(player)
+	return player and player.Character
+end
+
+local function GetRoot(character)
+
+	if not character then
+		return nil
+	end
+
+	return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetHumanoid(model)
+
+	if not model then
+		return nil
+	end
+
+	return model:FindFirstChildOfClass("Humanoid")
+end
+
+local function IsAlive(model)
+
+	local humanoid = GetHumanoid(model)
+
+	return humanoid ~= nil
+		and humanoid.Health > 0
+end
+
+--==================================================
+-- GET TARGETS
+--==================================================
+
+local function GetTargets()
+
+	local character = GetCharacter(LocalPlayer)
+	local root = GetRoot(character)
+
+	if not root then
+		return {}
+	end
+
+	local targets = {}
+
+	for _, enemy in ipairs(Enemies:GetChildren()) do
+
+		if enemy:IsA("Model")
+			and enemy ~= character then
+
+			local humanoid = GetHumanoid(enemy)
+			local enemyRoot = GetRoot(enemy)
+
+			if humanoid
+				and enemyRoot
+				and humanoid.Health > 0 then
+
+				local distance =
+					(enemyRoot.Position - root.Position).Magnitude
+
+				if distance <= RANGE then
+
+					table.insert(targets, {
+						Model = enemy,
+						Distance = distance
+					})
+
+				end
+			end
+		end
+	end
+
+	table.sort(targets, function(a, b)
+		return a.Distance < b.Distance
+	end)
+
+	local result = {}
+
+	for i = 1, math.min(#targets, MAX_TARGETS) do
+		table.insert(result, targets[i].Model)
+	end
+
+	return result
+end
+
+--==================================================
+-- GATHER
+--==================================================
+
+local function GatherMonsters()
+
+	local character = GetCharacter(LocalPlayer)
+	local root = GetRoot(character)
+
+	if not root then
+		return
+	end
+
+	local targets = GetTargets()
+	local count = #targets
+
+	if count == 0 then
+		return
+	end
+
+	for i, enemy in ipairs(targets) do
+
+		if enemy
+			and enemy.Parent
+			and IsAlive(enemy) then
+
+			local angle =
+				((i - 1) / math.max(count, 1))
+				* math.pi * 2
+
+			local offset = Vector3.new(
+				math.cos(angle) * GATHER_DISTANCE,
+				0,
+				math.sin(angle) * GATHER_DISTANCE
+			)
+
+			local position =
+				root.Position + offset
+
+			pcall(function()
+
+				enemy:PivotTo(
+					CFrame.lookAt(
+						position,
+						root.Position
+					)
+				)
+
+			end)
+		end
+	end
+end
+
+--==================================================
+-- ATTACK
+--==================================================
+
+local function AttackTarget(enemy)
+
+	if not enemy
+		or not enemy.Parent
+		or not IsAlive(enemy) then
+
+		return
+	end
+
+	local character = GetCharacter(LocalPlayer)
+	local root = GetRoot(character)
+
+	local enemyRoot = GetRoot(enemy)
+	local humanoid = GetHumanoid(enemy)
+
+	if not root
+		or not enemyRoot
+		or not humanoid then
+
+		return
+	end
+
+	local distance =
+		(enemyRoot.Position - root.Position).Magnitude
+
+	if distance > RANGE then
+		return
+	end
+
+	-- หันเข้าหาเป้าหมาย
+	pcall(function()
+
+		root.CFrame = CFrame.lookAt(
+			root.Position,
+
+			Vector3.new(
+				enemyRoot.Position.X,
+				root.Position.Y,
+				enemyRoot.Position.Z
+			)
+		)
+
+	end)
+
+	-- 1 Hit
+	pcall(function()
+		humanoid:TakeDamage(DAMAGE)
+	end)
+end
+
+--==================================================
+-- FIND PLAYER
+--==================================================
+
+local function FindPlayerByName(name)
+
+	if not name or name == "" then
+		return nil
+	end
+
+	name = string.lower(name)
+
+	-- Username
+	for _, player in ipairs(Players:GetPlayers()) do
+
+		if string.lower(player.Name) == name then
+			return player
+		end
+
+	end
+
+	-- DisplayName
+	for _, player in ipairs(Players:GetPlayers()) do
+
+		if string.lower(player.DisplayName) == name then
+			return player
+		end
+
+	end
+
+	-- Partial name
+	for _, player in ipairs(Players:GetPlayers()) do
+
+		if string.find(
+			string.lower(player.Name),
+			name,
+			1,
+			true
+		) then
+
+			return player
+
+		end
+	end
+
+	return nil
+end
+
+--==================================================
+-- AIM LOCK
+--==================================================
+
+local AimTarget = nil
+
+local function GetAimTarget()
+
+	if not Settings.AimLock then
+		return nil
+	end
+
+	local target =
+		FindPlayerByName(
+			Settings.AimPlayerName
+		)
+
+	if not target
+		or target == LocalPlayer then
+
+		return nil
+	end
+
+	local character =
+		GetCharacter(target)
+
+	local humanoid =
+		GetHumanoid(character)
+
+	local root =
+		GetRoot(character)
+
+	if not character
+		or not humanoid
+		or not root
+		or humanoid.Health <= 0 then
+
+		return nil
+	end
+
+	local myCharacter =
+		GetCharacter(LocalPlayer)
+
+	local myRoot =
+		GetRoot(myCharacter)
+
+	if not myRoot then
+		return nil
+	end
+
+	local distance =
+		(root.Position - myRoot.Position).Magnitude
+
+	if distance > RANGE then
+		return nil
+	end
+
+	return target
+end
+
+--==================================================
+-- AIM CAMERA
+--==================================================
+
+RunService.RenderStepped:Connect(function()
+
+	if not Settings.AimLock then
+
+		AimTarget = nil
+		return
+
+	end
+
+	local target = GetAimTarget()
+
+	AimTarget = target
+
+	if not target then
+		return
+	end
+
+	local character =
+		GetCharacter(target)
+
+	local root =
+		GetRoot(character)
+
+	local camera =
+		workspace.CurrentCamera
+
+	if not root or not camera then
+		return
+	end
+
+	pcall(function()
+
+		camera.CFrame =
+			CFrame.lookAt(
+				camera.CFrame.Position,
+				root.Position
+			)
+
+	end)
+end)
+
+--==================================================
+-- UI
+--==================================================
+
+local oldUI =
+	PlayerGui:FindFirstChild("DCombatUI")
+
+if oldUI then
+	oldUI:Destroy()
+end
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "DCombatUI"
+Gui.ResetOnSpawn = false
+Gui.Parent = PlayerGui
+
+--==================================================
+-- MAIN
+--==================================================
+
+local Main = Instance.new("Frame")
+
+Main.Name = "Main"
+
+Main.Size =
+	UDim2.new(0, 320, 0, 500)
+
+Main.Position =
+	UDim2.new(0, 20, 0.5, -250)
+
+Main.BackgroundColor3 =
+	Color3.fromRGB(20, 20, 25)
+
+Main.BorderSizePixel = 0
+
+Main.Parent = Gui
+
+local MainCorner =
+	Instance.new("UICorner")
+
+MainCorner.CornerRadius =
+	UDim.new(0, 12)
+
+MainCorner.Parent = Main
+
+--==================================================
+-- TITLE
+--==================================================
+
+local Title =
+	Instance.new("TextLabel")
+
+Title.Size =
+	UDim2.new(1, -20, 0, 45)
+
+Title.Position =
+	UDim2.new(0, 10, 0, 5)
+
+Title.BackgroundTransparency = 1
+
+Title.Text = "⚔ D COMBAT"
+
+Title.TextColor3 =
+	Color3.fromRGB(255, 255, 255)
+
+Title.TextSize = 24
+
+Title.Font =
+	Enum.Font.GothamBold
+
+Title.Parent = Main
+
+--==================================================
+-- DRAG UI
+-- Mouse + Touch
+--==================================================
+
+local Dragging = false
+local DragStart
+local StartPosition
+
+local function UpdateDrag(input)
+
+	local Delta =
+		input.Position - DragStart
+
+	Main.Position =
+		UDim2.new(
+			StartPosition.X.Scale,
+			StartPosition.X.Offset + Delta.X,
+
+			StartPosition.Y.Scale,
+			StartPosition.Y.Offset + Delta.Y
+		)
+end
+
+Title.InputBegan:Connect(function(input)
+
+	if input.UserInputType ==
+		Enum.UserInputType.MouseButton1
+		or input.UserInputType ==
+		Enum.UserInputType.Touch then
+
+		Dragging = true
+
+		DragStart =
+			input.Position
+
+		StartPosition =
+			Main.Position
+
+	end
+end)
+
+Title.InputEnded:Connect(function(input)
+
+	if input.UserInputType ==
+		Enum.UserInputType.MouseButton1
+		or input.UserInputType ==
+		Enum.UserInputType.Touch then
+
+		Dragging = false
+
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if not Dragging then
+		return
+	end
+
+	if input.UserInputType ==
+		Enum.UserInputType.MouseMovement
+		or input.UserInputType ==
+		Enum.UserInputType.Touch then
+
+		UpdateDrag(input)
+
+	end
+end)
+
+--==================================================
+-- INFO
+--==================================================
+
+local Info =
+	Instance.new("TextLabel")
+
+Info.Size =
+	UDim2.new(1, -20, 0, 45)
+
+Info.Position =
+	UDim2.new(0, 10, 0, 48)
+
+Info.BackgroundTransparency = 1
+
+Info.Text =
+	"RANGE : " .. RANGE ..
+	"\nDAMAGE : " .. DAMAGE
+
+Info.TextColor3 =
+	Color3.fromRGB(190, 190, 190)
+
+Info.TextSize = 14
+
+Info.Font =
+	Enum.Font.Gotham
+
+Info.TextXAlignment =
+	Enum.TextXAlignment.Left
+
+Info.Parent = Main
+
+--==================================================
+-- TARGET INFO
+--==================================================
+
+local TargetInfo =
+	Instance.new("TextLabel")
+
+TargetInfo.Size =
+	UDim2.new(1, -20, 0, 55)
+
+TargetInfo.Position =
+	UDim2.new(0, 10, 0, 92)
+
+TargetInfo.BackgroundColor3 =
+	Color3.fromRGB(30, 30, 38)
+
+TargetInfo.Text =
+	"TARGET : NONE\nHP : -"
+
+TargetInfo.TextColor3 =
+	Color3.fromRGB(255, 255, 255)
+
+TargetInfo.TextSize = 15
+
+TargetInfo.Font =
+	Enum.Font.GothamBold
+
+TargetInfo.Parent = Main
+
+local TargetCorner =
+	Instance.new("UICorner")
+
+TargetCorner.CornerRadius =
+	UDim.new(0, 8)
+
+TargetCorner.Parent = TargetInfo
+
+--==================================================
+-- BUTTON FUNCTION
+--==================================================
+
+local function CreateButton(text, y)
+
+	local Button =
+		Instance.new("TextButton")
+
+	Button.Size =
+		UDim2.new(1, -20, 0, 40)
+
+	Button.Position =
+		UDim2.new(0, 10, 0, y)
+
+	Button.BackgroundColor3 =
+		Color3.fromRGB(45, 45, 55)
+
+	Button.Text = text
+
+	Button.TextColor3 =
+		Color3.fromRGB(255, 255, 255)
+
+	Button.TextSize = 15
+
+	Button.Font =
+		Enum.Font.GothamBold
+
+	Button.AutoButtonColor = true
+
+	Button.Parent = Main
+
+	local Corner =
+		Instance.new("UICorner")
+
+	Corner.CornerRadius =
+		UDim.new(0, 8)
+
+	Corner.Parent = Button
+
+	return Button
+end
+
+--==================================================
+-- BUTTONS
+--==================================================
+
+local AutoButton =
+	CreateButton(
+		"AUTO ATTACK : OFF",
+		155
+	)
+
+local FastButton =
+	CreateButton(
+		"FAST ATTACK : OFF",
+		200
+	)
+
+local GatherButton =
+	CreateButton(
+		"GATHER : OFF",
+		245
+	)
+
+local AimButton =
+	CreateButton(
+		"AIM LOCK : OFF",
+		290
+	)
+
+--==================================================
+-- NAME BOX
+--==================================================
+
+local NameBox =
+	Instance.new("TextBox")
+
+NameBox.Size =
+	UDim2.new(1, -20, 0, 40)
+
+NameBox.Position =
+	UDim2.new(0, 10, 0, 335)
+
+NameBox.BackgroundColor3 =
+	Color3.fromRGB(35, 35, 45)
+
+NameBox.PlaceholderText =
+	"ใส่ชื่อ Player ที่ต้องการล็อก"
+
+NameBox.Text = ""
+
+NameBox.TextColor3 =
+	Color3.fromRGB(255, 255, 255)
+
+NameBox.PlaceholderColor3 =
+	Color3.fromRGB(150, 150, 150)
+
+NameBox.TextSize = 14
+
+NameBox.Font =
+	Enum.Font.Gotham
+
+NameBox.ClearTextOnFocus = false
+
+NameBox.Parent = Main
+
+local NameCorner =
+	Instance.new("UICorner")
+
+NameCorner.CornerRadius =
+	UDim.new(0, 8)
+
+NameCorner.Parent = NameBox
+
+--==================================================
+-- AIM INFO
+--==================================================
+
+local AimInfo =
+	Instance.new("TextLabel")
+
+AimInfo.Size =
+	UDim2.new(1, -20, 0, 35)
+
+AimInfo.Position =
+	UDim2.new(0, 10, 0, 380)
+
+AimInfo.BackgroundTransparency = 1
+
+AimInfo.Text =
+	"AIM TARGET : NONE"
+
+AimInfo.TextColor3 =
+	Color3.fromRGB(190, 190, 190)
+
+AimInfo.TextSize = 13
+
+AimInfo.Font =
+	Enum.Font.Gotham
+
+AimInfo.TextXAlignment =
+	Enum.TextXAlignment.Left
+
+AimInfo.Parent = Main
+
+--==================================================
+-- MINIMIZE
+--==================================================
+
+local MinimizeButton =
+	CreateButton(
+		"MINIMIZE",
+		425
+	)
+
+--==================================================
+-- AUTO ATTACK
+--==================================================
+
+AutoButton.MouseButton1Click:Connect(function()
+
+	Settings.AutoAttack =
+		not Settings.AutoAttack
+
+	if Settings.AutoAttack then
+
+		AutoButton.Text =
+			"AUTO ATTACK : ON"
+
+		AutoButton.BackgroundColor3 =
+			Color3.fromRGB(35, 120, 65)
+
+	else
+
+		AutoButton.Text =
+			"AUTO ATTACK : OFF"
+
+		AutoButton.BackgroundColor3 =
+			Color3.fromRGB(45, 45, 55)
+
+	end
+end)
+
+--==================================================
+-- FAST ATTACK
+--==================================================
+
+FastButton.MouseButton1Click:Connect(function()
+
+	Settings.FastAttack =
+		not Settings.FastAttack
+
+	if Settings.FastAttack then
+
+		FastButton.Text =
+			"FAST ATTACK : ON"
+
+		FastButton.BackgroundColor3 =
+			Color3.fromRGB(150, 90, 30)
+
+	else
+
+		FastButton.Text =
+			"FAST ATTACK : OFF"
+
+		FastButton.BackgroundColor3 =
+			Color3.fromRGB(45, 45, 55)
+
+	end
+end)
+
+--==================================================
+-- GATHER
+--==================================================
+
+GatherButton.MouseButton1Click:Connect(function()
+
+	Settings.Gather =
+		not Settings.Gather
+
+	if Settings.Gather then
+
+		GatherButton.Text =
+			"GATHER : ON"
+
+		GatherButton.BackgroundColor3 =
+			Color3.fromRGB(70, 80, 160)
+
+	else
+
+		GatherButton.Text =
+			"GATHER : OFF"
+
+		GatherButton.BackgroundColor3 =
+			Color3.fromRGB(45, 45, 55)
+
+	end
+end)
+
+--==================================================
+-- AIM LOCK
+--==================================================
+
+AimButton.MouseButton1Click:Connect(function()
+
+	Settings.AimPlayerName =
+		NameBox.Text
+
+	if Settings.AimPlayerName == "" then
+
+		AimButton.Text =
+			"AIM LOCK : ENTER NAME"
+
+		return
+	end
+
+	local target =
+		FindPlayerByName(
+			Settings.AimPlayerName
+		)
+
+	if not target then
+
+		AimButton.Text =
+			"AIM LOCK : PLAYER NOT FOUND"
+
+		Settings.AimLock = false
+
+		task.delay(1.5, function()
+
+			if AimButton.Parent then
+
+				AimButton.Text =
+					"AIM LOCK : OFF"
+
+			end
+
+		end)
+
+		return
+	end
+
+	Settings.AimLock =
+		not Settings.AimLock
+
+	if Settings.AimLock then
+
+		AimButton.Text =
+			"AIM LOCK : " ..
+			target.Name
+
+		AimButton.BackgroundColor3 =
+			Color3.fromRGB(150, 50, 50)
+
+	else
+
+		AimButton.Text =
+			"AIM LOCK : OFF"
+
+		AimButton.BackgroundColor3 =
+			Color3.fromRGB(45, 45, 55)
+
+	end
+end)
+
+--==================================================
+-- NAME CHANGED
+--==================================================
+
+NameBox.FocusLost:Connect(function()
+
+	Settings.AimPlayerName =
+		NameBox.Text
+
+end)
+
+--==================================================
+-- MINIMIZE
+--==================================================
+
+local Minimized = false
+
+MinimizeButton.MouseButton1Click:Connect(function()
+
+	Minimized =
+		not Minimized
+
+	if Minimized then
+
+		for _, object in ipairs(Main:GetChildren()) do
+
+			if object ~= Title
+				and object ~= MinimizeButton
+				and object:IsA("GuiObject") then
+
+				object.Visible = false
+
+			end
+		end
+
+		Main.Size =
+			UDim2.new(0, 320, 0, 60)
+
+		MinimizeButton.Position =
+			UDim2.new(0, 10, 0, 10)
+
+		MinimizeButton.Size =
+			UDim2.new(1, -20, 0, 40)
+
+		MinimizeButton.Text =
+			"OPEN D COMBAT"
+
+	else
+
+		Main.Size =
+			UDim2.new(0, 320, 0, 500)
+
+		for _, object in ipairs(Main:GetChildren()) do
+			object.Visible = true
+		end
+
+		MinimizeButton.Position =
+			UDim2.new(0, 10, 0, 425)
+
+		MinimizeButton.Size =
+			UDim2.new(1, -20, 0, 40)
+
+		MinimizeButton.Text =
+			"MINIMIZE"
+
+	end
+end)
+
+--==================================================
+-- UPDATE UI
+--==================================================
+
+task.spawn(function()
+
+	while Gui.Parent do
+
+		pcall(function()
+
+			local targets =
+				GetTargets()
+
+			local target =
+				targets[1]
+
+			if target and IsAlive(target) then
+
+				local humanoid =
+					GetHumanoid(target)
+
+				if humanoid then
+
+					TargetInfo.Text =
+						"TARGET : " ..
+						target.Name ..
+						"\nHP : " ..
+						math.floor(humanoid.Health) ..
+						" / " ..
+						math.floor(humanoid.MaxHealth)
+
+				end
+
+			else
+
+				TargetInfo.Text =
+					"TARGET : NONE\nHP : -"
+
+			end
+
+			if Settings.AimLock then
+
+				local aimTarget =
+					GetAimTarget()
+
+				if aimTarget then
+
+					AimInfo.Text =
+						"AIM TARGET : " ..
+						aimTarget.Name
+
+				else
+
+					AimInfo.Text =
+						"AIM TARGET : NOT FOUND"
+
+				end
+
+			else
+
+				AimInfo.Text =
+					"AIM TARGET : NONE"
+
+			end
+
+		end)
+
+		task.wait(0.1)
+	end
+end)
+
+--==================================================
+-- COMBAT LOOP
+--==================================================
+
+task.spawn(function()
+
+	while Settings.Running do
+
+		pcall(function()
+
+			if Settings.Gather then
+				GatherMonsters()
+			end
+
+			if Settings.AutoAttack then
+
+				local targets =
+					GetTargets()
+
+				for _, enemy in ipairs(targets) do
+
+					if not Settings.AutoAttack then
+						break
+					end
+
+					AttackTarget(enemy)
+
+					if Settings.FastAttack then
+						task.wait(FAST_DELAY)
+					else
+						task.wait(NORMAL_DELAY)
+					end
+
+				end
+
+			else
+
+				task.wait(0.1)
+
+			end
+
+		end)
+	end
+end)
+
+--==================================================
+-- RESPAWN
+--==================================================
+
+LocalPlayer.CharacterAdded:Connect(function()
+
+	task.wait(1)
+
+	AimTarget = nil
+
+end)
+
+--==================================================
+-- START
+--==================================================
+
+print("====================================")
+print("D COMBAT ONE FILE LOADED")
+print("AUTO ATTACK : READY")
+print("FAST ATTACK : READY")
+print("GATHER : READY")
+print("AIM LOCK : READY")
+print("PLAYER NAME LOCK : READY")
+print("DRAG UI : READY")
+print("RANGE :", RANGE)
+print("DAMAGE :", DAMAGE)
+print("====================================")
